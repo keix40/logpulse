@@ -1,10 +1,10 @@
 FROM golang:1.22-alpine AS build
 WORKDIR /src
+COPY go.work go.work.sum ./
 COPY pkg ./pkg
 COPY deploy/alerts.yaml ./deploy/alerts.yaml
 COPY services/all ./services/all
 WORKDIR /src/services/all
-ENV GOWORK=off
 RUN go mod download && CGO_ENABLED=0 go build -o /logpulse-all .
 
 FROM alpine:3.20

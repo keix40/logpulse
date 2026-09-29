@@ -1,9 +1,9 @@
 FROM golang:1.22-alpine AS build
 WORKDIR /src
+COPY go.work go.work.sum ./
 COPY pkg ./pkg
 COPY services/alerter ./services/alerter
 WORKDIR /src/services/alerter
-ENV GOWORK=off
 RUN go mod download && CGO_ENABLED=0 go build -o /alerter .
 
 FROM alpine:3.20
