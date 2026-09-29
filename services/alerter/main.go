@@ -8,10 +8,8 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/logpulse/logpulse/pkg/alertengine"
-	"github.com/logpulse/logpulse/pkg/logevent"
 	"github.com/logpulse/logpulse/pkg/redisx"
 	"github.com/redis/go-redis/v9"
 )
@@ -48,54 +46,11 @@ func main() {
 	}()
 
 	runCtx, cancel := context.WithCancel(ctx)
-	go consumeAlerts(runCtx, rdb, engine, notifier, logger)
+	go consumeAlerts(runCtx, rdb, engine, notifier, cfg, logger)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 	cancel()
 	_ = rdb.Close()
-}
-
-func consumeAlerts(ctx context.Context, rdb *redis.Client, engine *alertengine.Engine, n *Notifier, logger *slog.Logger) {
-	consumer := redisx.ConsumerAlerter + "-1"
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		streams, err := rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
-			Group:    redisx.GroupAlerter,
-			Consumer: consumer,
-			Streams:  []string{redisx.StreamLogs, ">"},
-			Count:    32,
-			Block:    2 * time.Second,
-		}).Result()
-		if err != nil {
-			if err != redis.Nil {
-				logger.Error("xreadgroup", "err", err)
-			}
-			continue
-		}
-		now := time.Now().UTC()
-		for _, s := range streams {
-			for _, msg := range s.Messages {
-				raw, _ := msg.Values[redisx.FieldPayload].(string)
-				entry, err := logevent.ParseEntryJSON(raw)
-				if err != nil {
-					_ = rdb.XAck(ctx, redisx.StreamLogs, redisx.GroupAlerter, msg.ID)
-					continue
-				}
-				for _, inc := range engine.Process(entry, now) {
-					if err := n.Notify(ctx, inc); err != nil {
-						logger.Error("notify failed", "rule", inc.RuleID, "err", err)
-					} else {
-						logger.Info("alert sent", "rule", inc.RuleID, "fingerprint", inc.Fingerprint)
-					}
-				}
-				_ = rdb.XAck(ctx, redisx.StreamLogs, redisx.GroupAlerter, msg.ID)
-			}
-		}
-	}
 }
