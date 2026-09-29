@@ -11,6 +11,9 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: logpulse
     ports:
       - "8123:8123"
       - "9000:9000"
@@ -50,7 +53,7 @@ services:
     environment:
       REDIS_ADDR: redis:6379
       WORKER_HTTP_ADDR: 0.0.0.0:8081
-      CLICKHOUSE_DSN: clickhouse://default:@clickhouse:9000/default
+      CLICKHOUSE_DSN: clickhouse://default:logpulse@clickhouse:9000/default
       WORKER_CORS_ORIGINS: http://localhost:3000
     depends_on:
       redis:

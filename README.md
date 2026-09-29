@@ -94,7 +94,7 @@ Open the **Live tail** page, filter by level/service, pause/resume, then use **S
 See [`.env.example`](.env.example). Important variables:
 
 - `REDIS_ADDR` — Redis for all Go services
-- `CLICKHOUSE_DSN` — Worker storage (default `clickhouse://default:@clickhouse:9000/default`)
+- `CLICKHOUSE_DSN` — Worker storage (default `clickhouse://default:logpulse@clickhouse:9000/default`, matches Compose)
 - `ALERT_RULES_PATH` — YAML rules for alerter
 - `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` — optional notification targets
 - `NEXT_PUBLIC_WORKER_URL` / `NEXT_PUBLIC_INGEST_URL` — Browser-facing API bases

@@ -17,7 +17,7 @@ func loadConfig() config {
 	return config{
 		HTTPAddr:      envOr("WORKER_HTTP_ADDR", "0.0.0.0:8081"),
 		RedisAddr:     envOr("REDIS_ADDR", "redis:6379"),
-		ClickHouseDSN: envOr("CLICKHOUSE_DSN", "clickhouse://default:@clickhouse:9000/logpulse"),
+		ClickHouseDSN: envOr("CLICKHOUSE_DSN", "clickhouse://default:logpulse@clickhouse:9000/default"),
 		CORSOrigins:   strings.Split(origins, ","),
 	}
 }
