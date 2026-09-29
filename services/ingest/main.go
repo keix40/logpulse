@@ -35,7 +35,7 @@ func main() {
 	}
 	cancel()
 
-	publisher := &StreamPublisher{client: rdb, logger: logger}
+	publisher := &StreamPublisher{client: rdb, logger: logger, streamMaxLen: cfg.StreamMaxLen}
 	limits := limitsFromConfig(cfg)
 
 	r := chi.NewRouter()
@@ -93,15 +93,7 @@ func (p *StreamPublisher) Publish(ctx context.Context, entries []logevent.Entry)
 		if err != nil {
 			return err
 		}
-		args := &redis.XAddArgs{
-			Stream: redisx.StreamLogs,
-			Values: map[string]interface{}{redisx.FieldPayload: payload},
-		}
-		if p.streamMaxLen > 0 {
-			args.MaxLen = p.streamMaxLen
-			args.Approx = true
-		}
-		pipe.XAdd(ctx, args)
+		pipe.XAdd(ctx, redisx.LogStreamAddArgs(payload, p.streamMaxLen))
 	}
 	_, err := pipe.Exec(ctx)
 	return err

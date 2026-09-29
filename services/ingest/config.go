@@ -7,6 +7,7 @@ type config struct {
 	SyslogAddr   string
 	RedisAddr    string
 	MaxBodyBytes int64
+	StreamMaxLen int64
 }
 
 func loadConfig() config {
@@ -15,6 +16,7 @@ func loadConfig() config {
 		SyslogAddr:   envOr("INGEST_SYSLOG_ADDR", "0.0.0.0:5514"),
 		RedisAddr:    envOr("REDIS_ADDR", "redis:6379"),
 		MaxBodyBytes: parseMaxBodyBytes(envOr("INGEST_MAX_BODY_BYTES", "")),
+		StreamMaxLen: parseMaxBodyBytes(envOr("REDIS_STREAM_MAXLEN", "100000")),
 	}
 }
 
