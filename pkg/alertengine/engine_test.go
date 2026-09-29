@@ -57,7 +57,7 @@ func TestThresholdCooldownGroupsByServiceNotMessage(t *testing.T) {
 	now := time.Now()
 	for i := 0; i < 3; i++ {
 		e.Process(logevent.Entry{
-			Level: "error", Service: "api", Message: "fail-" + string(rune('a'+i)),
+			Level: "error", Service: "api", Message: fmt.Sprintf("fail-%d", i),
 		}, now.Add(time.Duration(i)*time.Second))
 	}
 	inc := e.Process(logevent.Entry{Level: "error", Service: "api", Message: "fail-d"}, now.Add(3*time.Second))
