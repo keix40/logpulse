@@ -1,0 +1,13 @@
+go 1.22.0
+
+toolchain go1.22.2
+
+use (
+	./pkg/alertengine
+	./pkg/logevent
+	./pkg/redisx
+	./services/agent
+	./services/alerter
+	./services/ingest
+	./services/worker
+)

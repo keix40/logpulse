@@ -1,0 +1,94 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: logpulse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ./deploy/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ingest:
+    build:
+      context: .
+      dockerfile: services/ingest/Dockerfile
+    ports:
+      - "8080:8080"
+      - "5514:5514"
+    environment:
+      REDIS_ADDR: redis:6379
+      INGEST_HTTP_ADDR: 0.0.0.0:8080
+      INGEST_SYSLOG_ADDR: 0.0.0.0:5514
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: services/worker/Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      REDIS_ADDR: redis:6379
+      WORKER_HTTP_ADDR: 0.0.0.0:8081
+      CLICKHOUSE_DSN: clickhouse://default:logpulse@clickhouse:9000/default
+      WORKER_CORS_ORIGINS: http://localhost:3000
+    depends_on:
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+
+  alerter:
+    build:
+      context: .
+      dockerfile: services/alerter/Dockerfile
+    ports:
+      - "8082:8082"
+    environment:
+      REDIS_ADDR: redis:6379
+      ALERTER_HTTP_ADDR: 0.0.0.0:8082
+      ALERT_RULES_PATH: /etc/logpulse/alerts.yaml
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_INGEST_URL: http://localhost:8080
+      NEXT_PUBLIC_WORKER_URL: http://localhost:8081
+      WORKER_URL: http://worker:8081
+    depends_on:
+      - worker
+      - ingest

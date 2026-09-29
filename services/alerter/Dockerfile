@@ -1,0 +1,14 @@
+FROM golang:1.22-alpine AS build
+WORKDIR /src
+COPY pkg ./pkg
+COPY services/alerter ./services/alerter
+WORKDIR /src/services/alerter
+ENV GOWORK=off
+RUN go mod download && CGO_ENABLED=0 go build -o /alerter .
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+COPY --from=build /alerter /usr/local/bin/alerter
+COPY deploy/alerts.yaml /etc/logpulse/alerts.yaml
+EXPOSE 8082
+ENTRYPOINT ["/usr/local/bin/alerter"]

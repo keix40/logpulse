@@ -1,0 +1,10 @@
+.env
+node_modules/
+web/node_modules/
+web/.next/
+*.exe
+/bin/
+/dist/
+coverage/
+.idea/
+.vscode/

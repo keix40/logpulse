@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: |
+            services/ingest/go.sum
+            services/worker/go.sum
+            services/alerter/go.sum
+            services/agent/go.sum
+            pkg/alertengine/go.sum
+      - name: Sync workspace
+        run: go work sync
+      - name: Test packages
+        run: |
+          go test ./pkg/logevent ./pkg/alertengine
+          go test ./services/ingest/...
+          go test ./services/worker/...
+          go test ./services/alerter/...
+          go test ./services/agent/...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62
+          args: --timeout=5m
+          working-directory: services/ingest
+        continue-on-error: true
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm install
+      - run: npm run lint
+      - run: npm test
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install smoke dependencies
+        run: sudo apt-get update && sudo apt-get install -y netcat-openbsd
+      - name: Build and start stack
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up --build -d
+      - name: Run end-to-end smoke
+        run: chmod +x scripts/e2e-smoke.sh && ./scripts/e2e-smoke.sh
+      - name: Compose logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs --no-color
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v --remove-orphans
