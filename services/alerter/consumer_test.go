@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/logpulse/logpulse/pkg/alerterstream"
 	"github.com/logpulse/logpulse/pkg/alertengine"
 	"github.com/logpulse/logpulse/pkg/logevent"
 	"github.com/logpulse/logpulse/pkg/redisx"
@@ -86,7 +87,7 @@ func TestHandleAlertMessageDoesNotAckWhenNotifyFailsBeforeDeadline(t *testing.T)
 		cancel()
 	}()
 
-	err = handleAlertMessage(runCtx, rdb, engine, notifier, msg, notifyOptions{maxAttempts: 5}, nil)
+	err = alerterstream.HandleAlertMessage(runCtx, rdb, engine, notifier, msg, alerterstream.NotifyOptions{MaxAttempts: 5}, nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v want context canceled", err)
 	}
@@ -146,7 +147,7 @@ func TestHandleAlertMessageDeadLettersAfterMaxAttempts(t *testing.T) {
 	engine := alertengine.NewEngine(rules)
 	notifier := &stubNotifier{failN: 10}
 
-	if err := handleAlertMessage(ctx, rdb, engine, notifier, msg, notifyOptions{maxAttempts: 2}, nil); err != nil {
+	if err := alerterstream.HandleAlertMessage(ctx, rdb, engine, notifier, msg, alerterstream.NotifyOptions{MaxAttempts: 2}, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -206,7 +207,7 @@ func TestHandleAlertMessageAcksAfterSuccessfulNotify(t *testing.T) {
 		Threshold: 1, Cooldown: time.Minute, Channels: []string{"slack"},
 	}}
 	engine := alertengine.NewEngine(rules)
-	if err := handleAlertMessage(ctx, rdb, engine, &stubNotifier{}, msg, notifyOptions{maxAttempts: 3}, nil); err != nil {
+	if err := alerterstream.HandleAlertMessage(ctx, rdb, engine, &stubNotifier{}, msg, alerterstream.NotifyOptions{MaxAttempts: 3}, nil); err != nil {
 		t.Fatal(err)
 	}
 	pending, _ := rdb.XPending(ctx, redisx.StreamLogs, redisx.GroupAlerter).Result()

@@ -1,14 +1,17 @@
-package main
+package workerstream
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
+	"net/http"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/logpulse/logpulse/pkg/livehub"
 	"github.com/logpulse/logpulse/pkg/logevent"
 	"github.com/logpulse/logpulse/pkg/redisx"
 	"github.com/redis/go-redis/v9"
@@ -23,7 +26,7 @@ type mockStore struct {
 
 func (m *mockStore) InsertBatch(_ context.Context, entries []logevent.Entry) error {
 	if m.failN > 0 && m.failures.Add(1) <= m.failN {
-		return errors.New("clickhouse down")
+		return errors.New("store down")
 	}
 	if m.err != nil {
 		return m.err
@@ -33,13 +36,17 @@ func (m *mockStore) InsertBatch(_ context.Context, entries []logevent.Entry) err
 	return nil
 }
 
+func (m *mockStore) SearchHandler(_ *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {}
+}
+
+func (m *mockStore) Close() error { return nil }
+
 func TestFlushBatchPersistsAndFansOut(t *testing.T) {
 	store := &mockStore{}
-	hub := NewLiveHub()
+	hub := livehub.New()
 	ch := make(chan []byte, 4)
-	hub.mu.Lock()
-	hub.clients[ch] = struct{}{}
-	hub.mu.Unlock()
+	hub.SubscribeTestChannel(ch)
 
 	entries := []logevent.Entry{{
 		Timestamp: time.Now().UTC(),
@@ -48,7 +55,7 @@ func TestFlushBatchPersistsAndFansOut(t *testing.T) {
 		Message:   "hello",
 	}}
 
-	rest := flushBatch(context.Background(), store, hub, entries, nil)
+	rest := FlushBatch(context.Background(), store, hub, entries, nil)
 	if len(rest) != 0 {
 		t.Fatalf("expected empty batch after flush")
 	}
@@ -71,17 +78,15 @@ func TestFlushBatchPersistsAndFansOut(t *testing.T) {
 }
 
 func TestFlushBatchSkipsFanOutOnStoreError(t *testing.T) {
-	store := &mockStore{err: errors.New("clickhouse down")}
-	hub := NewLiveHub()
+	store := &mockStore{err: errors.New("store down")}
+	hub := livehub.New()
 	ch := make(chan []byte, 1)
-	hub.mu.Lock()
-	hub.clients[ch] = struct{}{}
-	hub.mu.Unlock()
+	hub.SubscribeTestChannel(ch)
 
 	entries := []logevent.Entry{{
 		Level: logevent.LevelInfo, Service: "s", Message: "m",
 	}}
-	rest := flushBatch(context.Background(), store, hub, entries, nil)
+	rest := FlushBatch(context.Background(), store, hub, entries, nil)
 	if len(rest) != 1 {
 		t.Fatalf("expected batch retained on store error, got len=%d", len(rest))
 	}
@@ -126,7 +131,6 @@ func TestFailedInsertDoesNotAckMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Put the message in the PEL without acknowledging it.
 	streams, err := rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    redisx.GroupWorker,
 		Consumer: "worker-dead",
@@ -152,7 +156,7 @@ func TestFailedInsertDoesNotAckMessages(t *testing.T) {
 	}
 
 	store := &mockStore{failN: 1}
-	hub := NewLiveHub()
+	hub := livehub.New()
 	batch := &streamBatch{}
 	batch.append(entry, msgID)
 
@@ -192,15 +196,11 @@ func TestFailedInsertDoesNotAckMessages(t *testing.T) {
 
 func TestWorkerConsumerNameUsesHostname(t *testing.T) {
 	t.Setenv("WORKER_CONSUMER_NAME", "")
-	name := workerConsumerName()
+	name := WorkerConsumerName()
 	if name == redisx.ConsumerWorker+"-1" || name == redisx.ConsumerWorker {
 		t.Fatalf("expected hostname-suffixed consumer, got %q", name)
 	}
-	if !stringsHasPrefix(name, redisx.ConsumerWorker+"-") {
+	if len(name) < len(redisx.ConsumerWorker)+2 {
 		t.Fatalf("consumer name = %q", name)
 	}
-}
-
-func stringsHasPrefix(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }

@@ -2,19 +2,17 @@ package main
 
 import (
 	"strconv"
+
+	"github.com/logpulse/logpulse/pkg/ingestapi"
 )
 
 const defaultMaxBodyBytes = 2 << 20 // 2 MiB
 
-type ingestLimits struct {
-	MaxBodyBytes int64
-}
-
-func limitsFromConfig(cfg config) ingestLimits {
+func limitsFromConfig(cfg config) ingestapi.Limits {
 	if cfg.MaxBodyBytes > 0 {
-		return ingestLimits{MaxBodyBytes: cfg.MaxBodyBytes}
+		return ingestapi.Limits{MaxBodyBytes: cfg.MaxBodyBytes}
 	}
-	return ingestLimits{MaxBodyBytes: defaultMaxBodyBytes}
+	return ingestapi.Limits{MaxBodyBytes: defaultMaxBodyBytes}
 }
 
 func parseMaxBodyBytes(raw string) int64 {

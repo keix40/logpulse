@@ -1,10 +1,14 @@
 module github.com/logpulse/logpulse/services/ingest
 
-go 1.22
+go 1.22.0
+
+toolchain go1.22.2
 
 require (
 	github.com/alicebob/miniredis/v2 v2.34.0
 	github.com/go-chi/chi/v5 v5.2.1
+	github.com/logpulse/logpulse/pkg/auth v0.0.0
+	github.com/logpulse/logpulse/pkg/ingestapi v0.0.0
 	github.com/logpulse/logpulse/pkg/logevent v0.0.0
 	github.com/logpulse/logpulse/pkg/redisx v0.0.0
 	github.com/redis/go-redis/v9 v9.7.3
@@ -18,6 +22,8 @@ require (
 )
 
 replace (
+	github.com/logpulse/logpulse/pkg/auth => ../../pkg/auth
+	github.com/logpulse/logpulse/pkg/ingestapi => ../../pkg/ingestapi
 	github.com/logpulse/logpulse/pkg/logevent => ../../pkg/logevent
 	github.com/logpulse/logpulse/pkg/redisx => ../../pkg/redisx
 )

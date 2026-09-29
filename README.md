@@ -93,11 +93,20 @@ Open the **Live tail** page, filter by level/service, pause/resume, then use **S
 
 See [`.env.example`](.env.example). Important variables:
 
-- `REDIS_ADDR` — Redis for all Go services
-- `CLICKHOUSE_DSN` — Worker storage (default `clickhouse://default:logpulse@clickhouse:9000/default`, matches Compose)
+- `REDIS_ADDR` — Redis for all Go services (local Compose)
+- `REDIS_URL` — Redis connection URL (TLS/password); used by Render Key Value and Neon-style setups. Takes precedence over `REDIS_ADDR` when set.
+- `CLICKHOUSE_DSN` — Worker storage when `STORAGE_BACKEND=clickhouse` (default local stack)
+- `DATABASE_URL` — Postgres connection string when `STORAGE_BACKEND=postgres` (Neon: include `sslmode=require`)
+- `STORAGE_BACKEND` — `clickhouse` (default) or `postgres`
+- `INGEST_API_KEY` — When set, `POST /v1/logs` requires `Authorization: Bearer <key>` (syslog unchanged)
+- `READ_API_KEY` — When set, worker read APIs (`/v1/live`, `/v1/logs/search`) require the same bearer header
+- `INGEST_SYSLOG_ADDR` — TCP syslog listen address; leave empty to disable syslog (default for unset env in ingest/all)
+- `LOG_RETENTION_HOURS` — Postgres TTL job interval (default `168`)
 - `ALERT_RULES_PATH` — YAML rules for alerter
 - `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` — optional notification targets
-- `NEXT_PUBLIC_WORKER_URL` / `NEXT_PUBLIC_INGEST_URL` — Browser-facing API bases
+- `WORKER_URL` — Server-side backend base URL for the Next.js dashboard proxy (Vercel: your Render service URL)
+- `READ_API_KEY` — Set on Vercel only (never `NEXT_PUBLIC_*`); the proxy adds `Authorization` when calling the worker
+- `NEXT_PUBLIC_WORKER_URL` / `NEXT_PUBLIC_INGEST_URL` — Optional direct browser bases (local dev without proxy)
 
 ## Ingest API
 
@@ -185,9 +194,48 @@ The smoke script posts HTTP and syslog events, asserts ClickHouse search and the
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming (`feat/*`, `fix/*`), Conventional Commits, and trunk-based workflow on `main`.
 
+## Free deployment
+
+Run the **dashboard on Vercel** ([`web/`](web/)) and a **single Render free web service** for ingest, stream worker, live SSE, search, and alerts. Redis is [Render Key Value](https://render.com/docs/key-value); log storage is **Postgres** (e.g. [Neon free](https://neon.tech)) because ClickHouse has no practical free host.
+
+### Render (backend)
+
+1. Create a free Postgres database (Neon) and copy the connection string (`sslmode=require`).
+2. Apply the repo [`render.yaml`](render.yaml) blueprint (region **Singapore**, plan **free**) or create a **Docker** web service from [`Dockerfile.render`](Dockerfile.render).
+3. Add a free **Key Value** instance and wire `REDIS_URL` (blueprint links `logpulse-redis` automatically).
+4. Set environment variables:
+
+| Variable | Value |
+|----------|--------|
+| `STORAGE_BACKEND` | `postgres` |
+| `DATABASE_URL` | Neon URL (`postgresql://…?sslmode=require`) |
+| `REDIS_URL` | Render Key Value internal URL |
+| `INGEST_API_KEY` | Strong random secret (ingest clients / agents) |
+| `READ_API_KEY` | Strong random secret (dashboard proxy only) |
+| `WORKER_CORS_ORIGINS` | `https://logpulse-web-seven.vercel.app` (your Vercel URL) |
+| `LOG_RETENTION_HOURS` | `168` (or lower to stay under ~0.5 GB) |
+| `SLACK_WEBHOOK_URL` / `DISCORD_WEBHOOK_URL` / `TELEGRAM_*` | Optional alert channels |
+
+Render sets `PORT`; the all-in-one binary listens on `0.0.0.0:$PORT`. Syslog is off unless you set `INGEST_SYSLOG_ADDR`.
+
+Health check path: `/healthz`.
+
+### Vercel (dashboard)
+
+| Variable | Value |
+|----------|--------|
+| `WORKER_URL` | `https://<your-render-service>.onrender.com` |
+| `READ_API_KEY` | Same value as Render `READ_API_KEY` |
+
+The dashboard calls `/api/worker/live` and `/api/worker/search` on Vercel; those **server routes** attach the bearer token so the key is not exposed to browsers. Do not set `NEXT_PUBLIC_READ_API_KEY`.
+
+For log shipping from apps, `POST https://<render>/v1/logs` with `Authorization: Bearer <INGEST_API_KEY>`.
+
+Local docker-compose remains the default **ClickHouse** stack; set `STORAGE_BACKEND=postgres` and `DATABASE_URL` only when testing the free path.
+
 ## CI / releases
 
-- **CI** (`.github/workflows/ci.yml`): Go tests (including worker batch/fan-out and alerter notifier tests), web lint/test, and a Docker Compose **e2e smoke** job on pull requests.
+- **CI** (`.github/workflows/ci.yml`): Go tests (auth, Redis URL parsing, Postgres storage integration), web lint/test, **all-in-one smoke** (Redis + Postgres), and Docker Compose **e2e smoke** on pull requests.
 - **Release** (`.github/workflows/release.yml`): [release-please](https://github.com/googleapis/release-please) creates version tags from Conventional Commits on `main`.
 
 ## Roadmap
@@ -196,7 +244,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming (`feat/*`, `fix/*`), Co
 - [ ] Rule management UI with validation and dry-run
 - [ ] OpenTelemetry export from ingest
 - [ ] Multi-tenant API keys and retention policies
-- [ ] Helm chart / Render blueprint for production deploy
+- [x] Render blueprint + all-in-one backend for free hosting
 
 ## License
 

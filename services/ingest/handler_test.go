@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/logpulse/logpulse/pkg/ingestapi"
 	"github.com/logpulse/logpulse/pkg/logevent"
 )
 
@@ -27,7 +28,7 @@ func (m *mockPublisher) Publish(_ context.Context, entries []logevent.Entry) err
 
 func TestHandleBatchAcceptsValidPayload(t *testing.T) {
 	pub := &mockPublisher{}
-	handler := handleBatch(pub, ingestLimits{MaxBodyBytes: 4096}, nil)
+	handler := ingestapi.HandleBatch(pub, ingestapi.Limits{MaxBodyBytes: 4096}, nil)
 
 	body, _ := json.Marshal(logevent.BatchRequest{Logs: []logevent.Entry{
 		{Level: "info", Service: "api", Message: "hello"},
@@ -45,7 +46,7 @@ func TestHandleBatchAcceptsValidPayload(t *testing.T) {
 }
 
 func TestHandleBatchRejectsInvalidJSON(t *testing.T) {
-	handler := handleBatch(&mockPublisher{}, ingestLimits{MaxBodyBytes: 4096}, nil)
+	handler := ingestapi.HandleBatch(&mockPublisher{}, ingestapi.Limits{MaxBodyBytes: 4096}, nil)
 	req := httptest.NewRequest(http.MethodPost, "/v1/logs", strings.NewReader("{not-json"))
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -55,7 +56,7 @@ func TestHandleBatchRejectsInvalidJSON(t *testing.T) {
 }
 
 func TestHandleBatchRejectsValidationError(t *testing.T) {
-	handler := handleBatch(&mockPublisher{}, ingestLimits{MaxBodyBytes: 4096}, nil)
+	handler := ingestapi.HandleBatch(&mockPublisher{}, ingestapi.Limits{MaxBodyBytes: 4096}, nil)
 	body, _ := json.Marshal(logevent.BatchRequest{Logs: []logevent.Entry{
 		{Level: "trace", Service: "api", Message: "x"},
 	}})
@@ -68,7 +69,7 @@ func TestHandleBatchRejectsValidationError(t *testing.T) {
 }
 
 func TestHandleBatchRejectsOversizedBody(t *testing.T) {
-	handler := handleBatch(&mockPublisher{}, ingestLimits{MaxBodyBytes: 32}, nil)
+	handler := ingestapi.HandleBatch(&mockPublisher{}, ingestapi.Limits{MaxBodyBytes: 32}, nil)
 	body := []byte(`{"logs":[{"level":"info","service":"s","message":"` + strings.Repeat("x", 64) + `"}]}`)
 	req := httptest.NewRequest(http.MethodPost, "/v1/logs", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
@@ -79,7 +80,7 @@ func TestHandleBatchRejectsOversizedBody(t *testing.T) {
 }
 
 func TestHandleBatchRejectsLongMessageField(t *testing.T) {
-	handler := handleBatch(&mockPublisher{}, ingestLimits{MaxBodyBytes: 1 << 20}, nil)
+	handler := ingestapi.HandleBatch(&mockPublisher{}, ingestapi.Limits{MaxBodyBytes: 1 << 20}, nil)
 	body, _ := json.Marshal(logevent.BatchRequest{Logs: []logevent.Entry{
 		{Level: "info", Service: "api", Message: strings.Repeat("m", logevent.MaxMessageLen+1)},
 	}})
@@ -92,7 +93,7 @@ func TestHandleBatchRejectsLongMessageField(t *testing.T) {
 }
 
 func TestHandleBatchRejectsOversizedBatch(t *testing.T) {
-	handler := handleBatch(&mockPublisher{}, ingestLimits{MaxBodyBytes: 1 << 20}, nil)
+	handler := ingestapi.HandleBatch(&mockPublisher{}, ingestapi.Limits{MaxBodyBytes: 1 << 20}, nil)
 	logs := make([]logevent.Entry, logevent.MaxBatchEntries+1)
 	for i := range logs {
 		logs[i] = logevent.Entry{Level: "info", Service: "s", Message: "m"}

@@ -4,10 +4,18 @@ toolchain go1.22.2
 
 use (
 	./pkg/alertengine
+	./pkg/alerterstream
+	./pkg/auth
+	./pkg/ingestapi
+	./pkg/livehub
 	./pkg/logevent
+	./pkg/notify
 	./pkg/redisx
+	./pkg/storage
+	./pkg/workerstream
 	./services/agent
 	./services/alerter
+	./services/all
 	./services/ingest
 	./services/worker
 )

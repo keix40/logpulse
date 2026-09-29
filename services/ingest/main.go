@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -14,20 +12,20 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/logpulse/logpulse/pkg/logevent"
+	"github.com/logpulse/logpulse/pkg/auth"
+	"github.com/logpulse/logpulse/pkg/ingestapi"
 	"github.com/logpulse/logpulse/pkg/redisx"
-	"github.com/redis/go-redis/v9"
 )
-
-type batchPublisher interface {
-	Publish(ctx context.Context, entries []logevent.Entry) error
-}
 
 func main() {
 	cfg := loadConfig()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	rdb, err := redisx.NewClientFromEnv()
+	if err != nil {
+		logger.Error("redis config", "err", err)
+		os.Exit(1)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		logger.Error("redis ping failed", "err", err)
@@ -35,7 +33,7 @@ func main() {
 	}
 	cancel()
 
-	publisher := &StreamPublisher{client: rdb, logger: logger, streamMaxLen: cfg.StreamMaxLen}
+	publisher := &ingestapi.StreamPublisher{Client: rdb, Logger: logger, StreamMaxLen: cfg.StreamMaxLen}
 	limits := limitsFromConfig(cfg)
 
 	r := chi.NewRouter()
@@ -44,7 +42,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	r.Post("/v1/logs", handleBatch(publisher, limits, logger))
+	r.Post("/v1/logs", auth.RequireBearerFunc(cfg.IngestAPIKey, ingestapi.HandleBatch(publisher, limits, logger)))
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r}
 	go func() {
@@ -63,7 +61,7 @@ func main() {
 			os.Exit(1)
 		}
 		syslogLn = ln
-		go serveSyslog(syslogLn, publisher, logger)
+		go ingestapi.ServeSyslog(syslogLn, publisher, logger)
 		logger.Info("syslog listening", "addr", cfg.SyslogAddr)
 	}
 
@@ -78,52 +76,4 @@ func main() {
 		_ = syslogLn.Close()
 	}
 	_ = rdb.Close()
-}
-
-type StreamPublisher struct {
-	client       *redis.Client
-	logger       *slog.Logger
-	streamMaxLen int64
-}
-
-func (p *StreamPublisher) Publish(ctx context.Context, entries []logevent.Entry) error {
-	pipe := p.client.Pipeline()
-	for _, e := range entries {
-		payload, err := e.ToJSON()
-		if err != nil {
-			return err
-		}
-		pipe.XAdd(ctx, redisx.LogStreamAddArgs(payload, p.streamMaxLen))
-	}
-	_, err := pipe.Exec(ctx)
-	return err
-}
-
-func handleBatch(p batchPublisher, limits ingestLimits, logger *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, limits.MaxBodyBytes)
-		var req logevent.BatchRequest
-		dec := json.NewDecoder(r.Body)
-		if err := dec.Decode(&req); err != nil {
-			var maxErr *http.MaxBytesError
-			if errors.As(err, &maxErr) {
-				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
-				return
-			}
-			http.Error(w, "invalid json", http.StatusBadRequest)
-			return
-		}
-		logs, err := logevent.ValidateBatch(req.Logs)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if err := p.Publish(r.Context(), logs); err != nil {
-			logger.Error("publish failed", "err", err)
-			http.Error(w, "failed to enqueue", http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(`{"accepted":true}`))
-	}
 }

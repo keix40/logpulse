@@ -5,8 +5,7 @@ import { LogLine } from "@/components/LogLine";
 import { LEVELS } from "@/lib/logLevels";
 import type { LogEntry } from "@/lib/types";
 
-const workerBase =
-  process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8081";
+const searchPath = "/api/worker/search";
 
 export default function SearchPage() {
   const [q, setQ] = useState("");
@@ -26,7 +25,7 @@ export default function SearchPage() {
     if (service) params.set("service", service);
     params.set("limit", "200");
     try {
-      const res = await fetch(`${workerBase}/v1/logs/search?${params}`);
+      const res = await fetch(`${searchPath}?${params}`);
       if (!res.ok) throw new Error(await res.text());
       const data = (await res.json()) as { logs: LogEntry[] };
       setLogs(

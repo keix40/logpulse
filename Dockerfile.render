@@ -1,0 +1,16 @@
+FROM golang:1.22-alpine AS build
+WORKDIR /src
+COPY pkg ./pkg
+COPY deploy/alerts.yaml ./deploy/alerts.yaml
+COPY services/all ./services/all
+WORKDIR /src/services/all
+ENV GOWORK=off
+RUN go mod download && CGO_ENABLED=0 go build -o /logpulse-all .
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+COPY --from=build /logpulse-all /usr/local/bin/logpulse-all
+COPY deploy/alerts.yaml /etc/logpulse/alerts.yaml
+ENV ALERT_RULES_PATH=/etc/logpulse/alerts.yaml
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/logpulse-all"]

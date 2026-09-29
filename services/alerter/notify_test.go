@@ -12,10 +12,11 @@ import (
 	"testing"
 
 	"github.com/logpulse/logpulse/pkg/alertengine"
+	"github.com/logpulse/logpulse/pkg/notify"
 )
 
 func TestFormatIncidentMessage(t *testing.T) {
-	msg := formatIncidentMessage(alertengine.Incident{
+	msg := notify.FormatIncidentMessage(alertengine.Incident{
 		RuleName: "Smoke",
 		RuleID:   "e2e",
 		Count:    3,
@@ -35,7 +36,7 @@ func TestNotifierSlackWebhook(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	n := NewNotifierWithClient(config{SlackWebhookURL: srv.URL}, slog.New(slog.NewTextHandler(os.Stderr, nil)), srv.Client())
+	n := notify.NewWithClient(notify.Config{SlackWebhookURL: srv.URL}, slog.New(slog.NewTextHandler(os.Stderr, nil)), srv.Client())
 	err := n.Notify(context.Background(), alertengine.Incident{
 		RuleName: "Test",
 		RuleID:   "t1",
