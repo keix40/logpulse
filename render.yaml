@@ -1,0 +1,42 @@
+# Render Blueprint — free-tier LogPulse backend (single web service).
+# Dashboard: deploy web/ on Vercel and set WORKER_URL to this service URL.
+services:
+  - type: web
+    name: logpulse-backend
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile.render
+    healthCheckPath: /healthz
+    envVars:
+      - key: STORAGE_BACKEND
+        value: postgres
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: logpulse-redis
+          property: connectionString
+      - key: INGEST_API_KEY
+        generateValue: true
+      - key: READ_API_KEY
+        generateValue: true
+      - key: WORKER_CORS_ORIGINS
+        sync: false
+      - key: LOG_RETENTION_HOURS
+        value: "168"
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: DISCORD_WEBHOOK_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+
+  - type: keyvalue
+    name: logpulse-redis
+    plan: free
+    region: singapore
+    ipAllowList: []

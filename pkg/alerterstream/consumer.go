@@ -1,4 +1,4 @@
-package main
+package alerterstream
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/logpulse/logpulse/pkg/alertengine"
 	"github.com/logpulse/logpulse/pkg/logevent"
+	"github.com/logpulse/logpulse/pkg/notify"
 	"github.com/logpulse/logpulse/pkg/redisx"
 	"github.com/redis/go-redis/v9"
 )
@@ -19,23 +20,15 @@ const (
 	notifyRetryMax        = 30 * time.Second
 )
 
+type NotifyOptions struct {
+	MaxAttempts int
+}
+
 type incidentNotifier interface {
 	Notify(ctx context.Context, inc alertengine.Incident) error
 }
 
-type notifyOptions struct {
-	maxAttempts int
-}
-
-func notifyOptionsFromConfig(cfg config) notifyOptions {
-	max := cfg.MaxNotifyAttempts
-	if max <= 0 {
-		max = defaultNotifyAttempts
-	}
-	return notifyOptions{maxAttempts: max}
-}
-
-func alerterConsumerName() string {
+func ConsumerName() string {
 	if v := os.Getenv("ALERTER_CONSUMER_NAME"); v != "" {
 		return v
 	}
@@ -69,13 +62,14 @@ func deadLetterAlert(ctx context.Context, rdb *redis.Client, msg redis.XMessage,
 	}).Err()
 }
 
-func handleAlertMessage(
+// HandleAlertMessage processes one stream message (exported for tests).
+func HandleAlertMessage(
 	ctx context.Context,
 	rdb *redis.Client,
 	engine *alertengine.Engine,
 	n incidentNotifier,
 	msg redis.XMessage,
-	opts notifyOptions,
+	opts NotifyOptions,
 	logger *slog.Logger,
 ) error {
 	raw, _ := msg.Values[redisx.FieldPayload].(string)
@@ -92,7 +86,7 @@ func handleAlertMessage(
 
 	backoff := notifyRetryInitial
 	var lastErr error
-	for attempt := 1; attempt <= opts.maxAttempts; attempt++ {
+	for attempt := 1; attempt <= opts.MaxAttempts; attempt++ {
 		lastErr = notifyIncidents(ctx, n, incidents)
 		if lastErr == nil {
 			if logger != nil {
@@ -105,7 +99,7 @@ func handleAlertMessage(
 		if logger != nil {
 			logger.Error("notify failed", "id", msg.ID, "attempt", attempt, "err", lastErr)
 		}
-		if attempt >= opts.maxAttempts {
+		if attempt >= opts.MaxAttempts {
 			break
 		}
 		select {
@@ -126,14 +120,17 @@ func handleAlertMessage(
 		return err
 	}
 	if logger != nil {
-		logger.Warn("alert dead-lettered", "id", msg.ID, "attempts", opts.maxAttempts)
+		logger.Warn("alert dead-lettered", "id", msg.ID, "attempts", opts.MaxAttempts)
 	}
 	return rdb.XAck(ctx, redisx.StreamLogs, redisx.GroupAlerter, msg.ID).Err()
 }
 
-func consumeAlerts(ctx context.Context, rdb *redis.Client, engine *alertengine.Engine, n incidentNotifier, cfg config, logger *slog.Logger) {
-	consumer := alerterConsumerName()
-	opts := notifyOptionsFromConfig(cfg)
+// Run consumes the logs stream and sends notifications for matching rules.
+func Run(ctx context.Context, rdb *redis.Client, engine *alertengine.Engine, n *notify.Notifier, opts NotifyOptions, logger *slog.Logger) {
+	if opts.MaxAttempts <= 0 {
+		opts.MaxAttempts = defaultNotifyAttempts
+	}
+	consumer := ConsumerName()
 	for {
 		select {
 		case <-ctx.Done():
@@ -155,7 +152,7 @@ func consumeAlerts(ctx context.Context, rdb *redis.Client, engine *alertengine.E
 		}
 		for _, s := range streams {
 			for _, msg := range s.Messages {
-				if err := handleAlertMessage(ctx, rdb, engine, n, msg, opts, logger); err != nil {
+				if err := HandleAlertMessage(ctx, rdb, engine, n, msg, opts, logger); err != nil {
 					if errors.Is(err, context.Canceled) {
 						return
 					}

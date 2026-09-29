@@ -1,10 +1,14 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/logpulse/logpulse/pkg/ingestapi"
+)
 
 func TestParseSyslogLineRFC5424(t *testing.T) {
 	line := "<134>1 2026-09-29T12:00:00.000Z host e2e-syslog - - - E2E_SYSLOG_MARKER"
-	entry := parseSyslogLine(line)
+	entry := ingestapi.ParseSyslogLine(line)
 	if entry.Service != "e2e-syslog" {
 		t.Fatalf("service=%q", entry.Service)
 	}

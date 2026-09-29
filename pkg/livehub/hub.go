@@ -1,4 +1,4 @@
-package main
+package livehub
 
 import (
 	"context"
@@ -10,18 +10,18 @@ import (
 	"github.com/logpulse/logpulse/pkg/logevent"
 )
 
-type LiveHub struct {
+type Hub struct {
 	mu      sync.RWMutex
 	clients map[chan []byte]struct{}
 }
 
-func NewLiveHub() *LiveHub {
-	return &LiveHub{clients: make(map[chan []byte]struct{})}
+func New() *Hub {
+	return &Hub{clients: make(map[chan []byte]struct{})}
 }
 
-func (h *LiveHub) Run(_ context.Context, _ interface{}) {}
+func (h *Hub) Run(_ context.Context, _ interface{}) {}
 
-func (h *LiveHub) Broadcast(entry logevent.Entry) {
+func (h *Hub) Broadcast(entry logevent.Entry) {
 	b, err := json.Marshal(entry)
 	if err != nil {
 		return
@@ -36,7 +36,7 @@ func (h *LiveHub) Broadcast(entry logevent.Entry) {
 	}
 }
 
-func (h *LiveHub) SSEHandler() http.HandlerFunc {
+func (h *Hub) SSEHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
 		if !ok {
@@ -75,4 +75,11 @@ func (h *LiveHub) SSEHandler() http.HandlerFunc {
 			}
 		}
 	}
+}
+
+// SubscribeTestChannel adds a client channel (for tests).
+func (h *Hub) SubscribeTestChannel(ch chan []byte) {
+	h.mu.Lock()
+	h.clients[ch] = struct{}{}
+	h.mu.Unlock()
 }

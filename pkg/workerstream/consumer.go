@@ -1,4 +1,4 @@
-package main
+package workerstream
 
 import (
 	"context"
@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/logpulse/logpulse/pkg/livehub"
 	"github.com/logpulse/logpulse/pkg/logevent"
 	"github.com/logpulse/logpulse/pkg/redisx"
+	"github.com/logpulse/logpulse/pkg/storage"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -17,11 +19,6 @@ const (
 	insertRetryMax     = 30 * time.Second
 	pendingClaimCount  = 32
 )
-
-// LogStore persists accepted log batches.
-type LogStore interface {
-	InsertBatch(ctx context.Context, entries []logevent.Entry) error
-}
 
 type streamBatch struct {
 	entries []logevent.Entry
@@ -45,8 +42,7 @@ func (b *streamBatch) len() int {
 	return len(b.entries)
 }
 
-// workerConsumerName returns a unique Redis consumer name for this replica.
-func workerConsumerName() string {
+func WorkerConsumerName() string {
 	if v := os.Getenv("WORKER_CONSUMER_NAME"); v != "" {
 		return v
 	}
@@ -57,7 +53,7 @@ func workerConsumerName() string {
 	return redisx.ConsumerWorker + "-" + host
 }
 
-func persistBatch(ctx context.Context, rdb *redis.Client, store LogStore, hub *LiveHub, batch *streamBatch, logger *slog.Logger) error {
+func persistBatch(ctx context.Context, rdb *redis.Client, store storage.Store, hub *livehub.Hub, batch *streamBatch, logger *slog.Logger) error {
 	if batch.len() == 0 {
 		return nil
 	}
@@ -76,12 +72,12 @@ func persistBatch(ctx context.Context, rdb *redis.Client, store LogStore, hub *L
 	return nil
 }
 
-func persistBatchWithRetry(ctx context.Context, rdb *redis.Client, store LogStore, hub *LiveHub, batch *streamBatch, logger *slog.Logger) error {
+func persistBatchWithRetry(ctx context.Context, rdb *redis.Client, store storage.Store, hub *livehub.Hub, batch *streamBatch, logger *slog.Logger) error {
 	backoff := insertRetryInitial
 	for batch.len() > 0 {
 		if err := persistBatch(ctx, rdb, store, hub, batch, logger); err != nil {
 			if logger != nil {
-				logger.Error("clickhouse insert failed, will retry", "err", err, "pending", batch.len())
+				logger.Error("store insert failed, will retry", "err", err, "pending", batch.len())
 			}
 			select {
 			case <-ctx.Done():
@@ -101,11 +97,12 @@ func persistBatchWithRetry(ctx context.Context, rdb *redis.Client, store LogStor
 	return nil
 }
 
-func flushBatch(ctx context.Context, store LogStore, hub *LiveHub, entries []logevent.Entry, logger *slog.Logger) []logevent.Entry {
+// FlushBatch persists entries without Redis ack (used in tests).
+func FlushBatch(ctx context.Context, store storage.Store, hub *livehub.Hub, entries []logevent.Entry, logger *slog.Logger) []logevent.Entry {
 	batch := &streamBatch{entries: entries}
 	if err := persistBatch(ctx, nil, store, hub, batch, logger); err != nil {
 		if logger != nil {
-			logger.Error("clickhouse insert failed", "err", err)
+			logger.Error("store insert failed", "err", err)
 		}
 		return batch.entries
 	}
@@ -154,8 +151,9 @@ func processStreamMessages(ctx context.Context, rdb *redis.Client, batch *stream
 	}
 }
 
-func runStreamConsumer(ctx context.Context, rdb *redis.Client, store LogStore, hub *LiveHub, logger *slog.Logger) {
-	consumer := workerConsumerName()
+// RunConsumer reads the logs stream and writes to storage while fanning out live events.
+func RunConsumer(ctx context.Context, rdb *redis.Client, store storage.Store, hub *livehub.Hub, logger *slog.Logger) {
+	consumer := WorkerConsumerName()
 	batch := &streamBatch{}
 	flush := func() {
 		_ = persistBatchWithRetry(ctx, rdb, store, hub, batch, logger)
@@ -206,9 +204,12 @@ func runStreamConsumer(ctx context.Context, rdb *redis.Client, store LogStore, h
 	}
 }
 
-func ensureGroup(ctx context.Context, rdb *redis.Client, stream, group string, logger *slog.Logger) {
+// EnsureGroup creates the Redis consumer group if missing.
+func EnsureGroup(ctx context.Context, rdb *redis.Client, stream, group string, logger *slog.Logger) {
 	err := rdb.XGroupCreateMkStream(ctx, stream, group, "0").Err()
 	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
-		logger.Warn("consumer group create", "stream", stream, "group", group, "err", err)
+		if logger != nil {
+			logger.Warn("consumer group create", "stream", stream, "group", group, "err", err)
+		}
 	}
 }

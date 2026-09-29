@@ -14,21 +14,30 @@ jobs:
         with:
           go-version: "1.22"
           cache-dependency-path: |
+            go.work.sum
             services/ingest/go.sum
             services/worker/go.sum
             services/alerter/go.sum
+            services/all/go.sum
             services/agent/go.sum
             pkg/alertengine/go.sum
             pkg/redisx/go.sum
+            pkg/storage/go.sum
+            pkg/workerstream/go.sum
       - name: Sync workspace
         run: go work sync
       - name: Test packages
         run: |
-          go test ./pkg/logevent ./pkg/alertengine ./pkg/redisx
+          go test ./pkg/logevent ./pkg/alertengine ./pkg/redisx ./pkg/auth ./pkg/livehub ./pkg/ingestapi ./pkg/notify ./pkg/workerstream
           go test ./services/ingest/...
           go test ./services/worker/...
           go test ./services/alerter/...
           go test ./services/agent/...
+      - name: Postgres storage integration
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+        run: |
+          go test -tags=integration ./pkg/storage/... -count=1
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
@@ -71,6 +80,64 @@ jobs:
           version: v1.62
           args: --timeout=5m
           working-directory: pkg/redisx
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+  all-smoke:
+    runs-on: ubuntu-latest
+    needs: go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Sync workspace
+        run: go work sync
+      - name: Start Redis
+        run: docker run -d --name logpulse-redis -p 6379:6379 redis:7-alpine
+      - name: Start Postgres
+        run: |
+          docker run -d --name logpulse-pg \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 5433:5432 postgres:16-alpine
+      - name: Wait for Postgres
+        run: |
+          for _ in $(seq 1 30); do
+            docker exec logpulse-pg pg_isready -U postgres && exit 0
+            sleep 2
+          done
+          exit 1
+      - name: Run all-in-one smoke
+        env:
+          PORT: "8080"
+          REDIS_ADDR: localhost:6379
+          DATABASE_URL: postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable
+          STORAGE_BACKEND: postgres
+          INGEST_API_KEY: test-ingest-key
+          READ_API_KEY: test-read-key
+          WORKER_CORS_ORIGINS: http://localhost:3000
+          ALERT_RULES_PATH: deploy/alerts.yaml
+        run: |
+          go build -o /tmp/logpulse-all ./services/all
+          /tmp/logpulse-all &
+          echo $! > /tmp/all.pid
+          chmod +x scripts/all-smoke.sh
+          INGEST_API_KEY=test-ingest-key READ_API_KEY=test-read-key BASE_URL=http://localhost:8080 ./scripts/all-smoke.sh
+      - name: Stop services
+        if: always()
+        run: |
+          kill "$(cat /tmp/all.pid 2>/dev/null)" 2>/dev/null || true
+          docker rm -f logpulse-redis logpulse-pg 2>/dev/null || true
 
   web:
     runs-on: ubuntu-latest

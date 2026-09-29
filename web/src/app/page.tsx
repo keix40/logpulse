@@ -5,8 +5,7 @@ import { LogLine } from "@/components/LogLine";
 import { LEVELS } from "@/lib/logLevels";
 import type { LogEntry } from "@/lib/types";
 
-const workerBase =
-  process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8081";
+const liveUrl = "/api/worker/live";
 
 export default function LivePage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -18,7 +17,7 @@ export default function LivePage() {
   pausedRef.current = paused;
 
   useEffect(() => {
-    const es = new EventSource(`${workerBase}/v1/live`);
+    const es = new EventSource(liveUrl);
     es.addEventListener("connected", () => setConnected(true));
     es.addEventListener("log", (ev) => {
       if (pausedRef.current) return;

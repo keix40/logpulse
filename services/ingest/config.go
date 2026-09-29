@@ -8,15 +8,17 @@ type config struct {
 	RedisAddr    string
 	MaxBodyBytes int64
 	StreamMaxLen int64
+	IngestAPIKey string
 }
 
 func loadConfig() config {
 	return config{
 		HTTPAddr:     envOr("INGEST_HTTP_ADDR", "0.0.0.0:8080"),
-		SyslogAddr:   envOr("INGEST_SYSLOG_ADDR", "0.0.0.0:5514"),
+		SyslogAddr:   os.Getenv("INGEST_SYSLOG_ADDR"),
 		RedisAddr:    envOr("REDIS_ADDR", "redis:6379"),
 		MaxBodyBytes: parseMaxBodyBytes(envOr("INGEST_MAX_BODY_BYTES", "")),
 		StreamMaxLen: parseMaxBodyBytes(envOr("REDIS_STREAM_MAXLEN", "100000")),
+		IngestAPIKey: os.Getenv("INGEST_API_KEY"),
 	}
 }
 

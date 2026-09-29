@@ -5,6 +5,8 @@ import (
 	"strconv"
 )
 
+const defaultNotifyAttempts = 5
+
 type config struct {
 	HTTPAddr            string
 	RedisAddr           string

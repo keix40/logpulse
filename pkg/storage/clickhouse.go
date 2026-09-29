@@ -1,4 +1,4 @@
-package main
+package storage
 
 import (
 	"context"
@@ -18,7 +18,7 @@ type ClickHouseStore struct {
 	conn clickhouse.Conn
 }
 
-func NewClickHouseStore(dsn string) (*ClickHouseStore, error) {
+func NewClickHouse(dsn string) (*ClickHouseStore, error) {
 	opts, err := clickhouse.ParseDSN(dsn)
 	if err != nil {
 		return nil, err
@@ -30,10 +30,12 @@ func NewClickHouseStore(dsn string) (*ClickHouseStore, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := conn.Ping(ctx); err != nil {
+		_ = conn.Close()
 		return nil, err
 	}
 	store := &ClickHouseStore{conn: conn}
 	if err := store.ensureSchema(ctx); err != nil {
+		_ = conn.Close()
 		return nil, err
 	}
 	return store, nil

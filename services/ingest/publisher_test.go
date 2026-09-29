@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/logpulse/logpulse/pkg/ingestapi"
 	"github.com/logpulse/logpulse/pkg/logevent"
 	"github.com/logpulse/logpulse/pkg/redisx"
 	"github.com/redis/go-redis/v9"
@@ -21,7 +22,7 @@ func TestStreamPublisherTrimsWithApproxMaxLen(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	defer rdb.Close()
 
-	pub := &StreamPublisher{client: rdb, streamMaxLen: 2}
+	pub := &ingestapi.StreamPublisher{Client: rdb, StreamMaxLen: 2}
 	ctx := context.Background()
 	entry := logevent.Entry{
 		Timestamp: time.Now().UTC(),

@@ -1,4 +1,4 @@
-package main
+package ingestapi
 
 import (
 	"bufio"
@@ -15,7 +15,7 @@ import (
 // RFC5424-ish: <pri>version timestamp hostname app procid msgid [sd] msg
 var syslogRe = regexp.MustCompile(`^<\d+>\d*\s+\S+\s+\S+\s+(?P<app>\S+)\s+\S*\s+\S*\s+(?P<msg>.*)$`)
 
-func serveSyslog(ln net.Listener, p *StreamPublisher, logger *slog.Logger) {
+func ServeSyslog(ln net.Listener, p Publisher, logger *slog.Logger) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -25,7 +25,7 @@ func serveSyslog(ln net.Listener, p *StreamPublisher, logger *slog.Logger) {
 	}
 }
 
-func handleSyslogConn(conn net.Conn, p *StreamPublisher, logger *slog.Logger) {
+func handleSyslogConn(conn net.Conn, p Publisher, logger *slog.Logger) {
 	defer conn.Close()
 	sc := bufio.NewScanner(conn)
 	for sc.Scan() {
@@ -33,17 +33,18 @@ func handleSyslogConn(conn net.Conn, p *StreamPublisher, logger *slog.Logger) {
 		if line == "" {
 			continue
 		}
-		entry := parseSyslogLine(line)
+		entry := ParseSyslogLine(line)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		err := p.Publish(ctx, []logevent.Entry{entry})
 		cancel()
-		if err != nil {
+		if err != nil && logger != nil {
 			logger.Error("syslog publish failed", "err", err)
 		}
 	}
 }
 
-func parseSyslogLine(line string) logevent.Entry {
+// ParseSyslogLine maps a syslog line to a log entry.
+func ParseSyslogLine(line string) logevent.Entry {
 	entry := logevent.Entry{
 		Timestamp: time.Now().UTC(),
 		Level:     logevent.LevelInfo,
