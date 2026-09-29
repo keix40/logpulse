@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -74,7 +75,7 @@ func (s *ClickHouseStore) InsertBatch(ctx context.Context, entries []logevent.En
 	return batch.Send()
 }
 
-func (s *ClickHouseStore) SearchHandler() http.HandlerFunc {
+func (s *ClickHouseStore) SearchHandler(logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
 		level := r.URL.Query().Get("level")
@@ -110,7 +111,10 @@ LIMIT %d`, strings.Join(where, " AND "), limit)
 
 		rows, err := s.conn.Query(r.Context(), sql, args...)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			if logger != nil {
+				logger.Error("search query failed", "err", err)
+			}
+			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 		defer rows.Close()
@@ -127,7 +131,10 @@ LIMIT %d`, strings.Join(where, " AND "), limit)
 			var ts time.Time
 			var lvl, svc, msg, attrs string
 			if err := rows.Scan(&ts, &lvl, &svc, &msg, &attrs); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				if logger != nil {
+					logger.Error("search scan failed", "err", err)
+				}
+				http.Error(w, "internal error", http.StatusInternalServerError)
 				return
 			}
 			out = append(out, row{Timestamp: ts, Level: lvl, Service: svc, Message: msg, Attributes: attrs})

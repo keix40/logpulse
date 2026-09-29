@@ -53,7 +53,7 @@ func main() {
 		_, _ = w.Write([]byte("ok"))
 	})
 	r.Get("/v1/live", hub.SSEHandler())
-	r.Get("/v1/logs/search", store.SearchHandler())
+	r.Get("/v1/logs/search", store.SearchHandler(logger))
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r}
 	go func() {

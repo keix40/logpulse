@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -73,7 +74,7 @@ func (n *Notifier) Notify(ctx context.Context, inc alertengine.Incident) error {
 		}
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf(strings.Join(errs, "; "))
+		return errors.New(strings.Join(errs, "; "))
 	}
 	return nil
 }
