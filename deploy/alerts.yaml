@@ -1,0 +1,33 @@
+rules:
+  - id: error-burst
+    name: Error burst
+    description: More than 50 errors in one minute across any service
+    enabled: true
+    level: error
+    window: 1m
+    threshold: 50
+    cooldown: 5m
+    channels:
+      - slack
+      - discord
+
+  - id: payment-failures
+    name: Payment failures
+    enabled: true
+    service: payments
+    level: error
+    window: 2m
+    threshold: 5
+    cooldown: 10m
+    channels:
+      - slack
+
+  - id: panic-pattern
+    name: Panic detected
+    enabled: true
+    pattern: "panic:"
+    window: 1m
+    cooldown: 15m
+    channels:
+      - slack
+      - telegram
