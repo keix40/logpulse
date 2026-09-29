@@ -48,6 +48,23 @@ func (e *Entry) Validate() error {
 	if strings.TrimSpace(e.Message) == "" {
 		return fmt.Errorf("message is required")
 	}
+	if len(e.Service) > MaxServiceLen {
+		return fmt.Errorf("service exceeds maximum length of %d", MaxServiceLen)
+	}
+	if len(e.Message) > MaxMessageLen {
+		return fmt.Errorf("message exceeds maximum length of %d", MaxMessageLen)
+	}
+	if len(e.Attributes) > MaxAttributesCount {
+		return fmt.Errorf("attributes exceed maximum count of %d", MaxAttributesCount)
+	}
+	for k, v := range e.Attributes {
+		if len(k) > MaxAttributeKeyLen {
+			return fmt.Errorf("attribute key %q exceeds maximum length of %d", k, MaxAttributeKeyLen)
+		}
+		if len(v) > MaxAttributeValueLen {
+			return fmt.Errorf("attribute value for %q exceeds maximum length of %d", k, MaxAttributeValueLen)
+		}
+	}
 	lvl := NormalizeLevel(e.Level)
 	if _, ok := validLevels[lvl]; !ok {
 		return fmt.Errorf("invalid level %q", e.Level)
@@ -63,8 +80,8 @@ func ValidateBatch(logs []Entry) ([]Entry, error) {
 	if len(logs) == 0 {
 		return nil, fmt.Errorf("logs array must not be empty")
 	}
-	if len(logs) > 1000 {
-		return nil, fmt.Errorf("batch size exceeds maximum of 1000")
+	if len(logs) > MaxBatchEntries {
+		return nil, fmt.Errorf("batch size exceeds maximum of %d", MaxBatchEntries)
 	}
 	out := make([]Entry, 0, len(logs))
 	for i := range logs {

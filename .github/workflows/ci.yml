@@ -19,11 +19,12 @@ jobs:
             services/alerter/go.sum
             services/agent/go.sum
             pkg/alertengine/go.sum
+            pkg/redisx/go.sum
       - name: Sync workspace
         run: go work sync
       - name: Test packages
         run: |
-          go test ./pkg/logevent ./pkg/alertengine
+          go test ./pkg/logevent ./pkg/alertengine ./pkg/redisx
           go test ./services/ingest/...
           go test ./services/worker/...
           go test ./services/alerter/...
@@ -34,7 +35,42 @@ jobs:
           version: v1.62
           args: --timeout=5m
           working-directory: services/ingest
-        continue-on-error: true
+      - name: golangci-lint (worker)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62
+          args: --timeout=5m
+          working-directory: services/worker
+      - name: golangci-lint (alerter)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62
+          args: --timeout=5m
+          working-directory: services/alerter
+      - name: golangci-lint (agent)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62
+          args: --timeout=5m
+          working-directory: services/agent
+      - name: golangci-lint (alertengine)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62
+          args: --timeout=5m
+          working-directory: pkg/alertengine
+      - name: golangci-lint (logevent)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62
+          args: --timeout=5m
+          working-directory: pkg/logevent
+      - name: golangci-lint (redisx)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62
+          args: --timeout=5m
+          working-directory: pkg/redisx
 
   web:
     runs-on: ubuntu-latest

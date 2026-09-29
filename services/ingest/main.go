@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -18,6 +19,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+type batchPublisher interface {
+	Publish(ctx context.Context, entries []logevent.Entry) error
+}
+
 func main() {
 	cfg := loadConfig()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -30,7 +35,8 @@ func main() {
 	}
 	cancel()
 
-	publisher := &StreamPublisher{client: rdb, logger: logger}
+	publisher := &StreamPublisher{client: rdb, logger: logger, streamMaxLen: cfg.StreamMaxLen}
+	limits := limitsFromConfig(cfg)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer, middleware.Timeout(30*time.Second))
@@ -38,7 +44,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	r.Post("/v1/logs", handleBatch(publisher, logger))
+	r.Post("/v1/logs", handleBatch(publisher, limits, logger))
 
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: r}
 	go func() {
@@ -75,8 +81,9 @@ func main() {
 }
 
 type StreamPublisher struct {
-	client *redis.Client
-	logger *slog.Logger
+	client       *redis.Client
+	logger       *slog.Logger
+	streamMaxLen int64
 }
 
 func (p *StreamPublisher) Publish(ctx context.Context, entries []logevent.Entry) error {
@@ -86,19 +93,23 @@ func (p *StreamPublisher) Publish(ctx context.Context, entries []logevent.Entry)
 		if err != nil {
 			return err
 		}
-		pipe.XAdd(ctx, &redis.XAddArgs{
-			Stream: redisx.StreamLogs,
-			Values: map[string]interface{}{redisx.FieldPayload: payload},
-		})
+		pipe.XAdd(ctx, redisx.LogStreamAddArgs(payload, p.streamMaxLen))
 	}
 	_, err := pipe.Exec(ctx)
 	return err
 }
 
-func handleBatch(p *StreamPublisher, logger *slog.Logger) http.HandlerFunc {
+func handleBatch(p batchPublisher, limits ingestLimits, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, limits.MaxBodyBytes)
 		var req logevent.BatchRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		dec := json.NewDecoder(r.Body)
+		if err := dec.Decode(&req); err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
 			http.Error(w, "invalid json", http.StatusBadRequest)
 			return
 		}

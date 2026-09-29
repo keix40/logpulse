@@ -18,6 +18,7 @@ type Rule struct {
 	Window      time.Duration `yaml:"window"`
 	Threshold   int           `yaml:"threshold,omitempty"`
 	Pattern     string        `yaml:"pattern,omitempty"`
+	GroupKey    string        `yaml:"group_key,omitempty"`
 	Cooldown    time.Duration `yaml:"cooldown"`
 	Channels    []string      `yaml:"channels"`
 
