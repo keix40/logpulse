@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/keix40/logpulse/compare/v1.0.1...v1.1.0) (2026-09-29)
+
+
+### Features
+
+* free-tier Render deployment with Postgres all-in-one backend ([#5](https://github.com/keix40/logpulse/issues/5)) ([21a4b2e](https://github.com/keix40/logpulse/commit/21a4b2e72b9c01c5df31b500ea23ee88fd7e091d))
+
 ## [1.0.1](https://github.com/keix40/logpulse/compare/v1.0.0...v1.0.1) (2026-09-29)
 
 
