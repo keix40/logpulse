@@ -4,7 +4,8 @@ set -euo pipefail
 INGEST_URL="${INGEST_URL:-http://localhost:8080}"
 WORKER_URL="${WORKER_URL:-http://localhost:8081}"
 MOCK_URL="${MOCK_URL:-http://localhost:9090}"
-SYSLOG_ADDR="${SYSLOG_ADDR:-127.0.0.1:5514}"
+SYSLOG_HOST="${SYSLOG_HOST:-127.0.0.1}"
+SYSLOG_PORT="${SYSLOG_PORT:-5514}"
 
 HTTP_MARKER="E2E_HTTP_$(date +%s)_$RANDOM"
 SYSLOG_MARKER="E2E_SYSLOG_$(date +%s)_$RANDOM"
