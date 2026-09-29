@@ -3,7 +3,7 @@ WORKDIR /src
 COPY go.work go.work.sum ./
 COPY pkg ./pkg
 COPY deploy/alerts.yaml ./deploy/alerts.yaml
-COPY services/all ./services/all
+COPY services ./services
 WORKDIR /src/services/all
 RUN go mod download && CGO_ENABLED=0 go build -o /logpulse-all .
 
