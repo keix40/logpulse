@@ -50,11 +50,12 @@ flowchart LR
 services/ingest/     HTTP + syslog → Redis Streams
 services/worker/     Stream consumer → ClickHouse + SSE fan-out
 services/alerter/    Stream consumer → rule engine → webhooks
-services/agent/      Planned file-tail agent (see README there)
+services/agent/      File-tail forwarder → ingest
+services/mockwebhook/ CI webhook receiver (not run in default compose)
 web/                 Next.js dashboard
-deploy/              ClickHouse init, default alert rules
-scripts/             log-generator.sh demo script
-docker-compose.yml   Full local stack
+deploy/              ClickHouse init, default alert rules, CI overlays
+scripts/             log-generator.sh, e2e-smoke.sh
+docker-compose.yml   Full local stack (+ docker-compose.ci.yml for CI)
 ```
 
 ## Quickstart
@@ -77,6 +78,13 @@ Generate sample logs:
 
 ```bash
 ./scripts/log-generator.sh
+```
+
+Tail a file into the pipeline:
+
+```bash
+docker compose up -d ingest
+go run ./services/agent --file /var/log/myapp.log --service myapp
 ```
 
 Open the **Live tail** page, filter by level/service, pause/resume, then use **Search** for stored history and **Alert rules** to inspect `deploy/alerts.yaml`.
@@ -156,20 +164,35 @@ The alerter applies **sliding time windows**, **deduplication** by rule/service/
 go work sync
 go test ./pkg/logevent ./pkg/alertengine
 go test ./services/ingest/...
+go test ./services/worker/...
+go test ./services/alerter/...
+go test ./services/agent/...
 
 cd web && npm install && npm test && npm run lint
 ```
+
+### End-to-end smoke (Docker)
+
+Same check CI runs after bringing up the stack with the CI overlay (mock webhook + smoke alert rule):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.ci.yml up --build -d
+./scripts/e2e-smoke.sh
+docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
+```
+
+The smoke script posts HTTP and syslog events, asserts ClickHouse search and the worker SSE stream receive them, and verifies the alerter delivers a webhook to `mockwebhook`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming (`feat/*`, `fix/*`), Conventional Commits, and trunk-based workflow on `main`.
 
 ## CI / releases
 
-- **CI** (`.github/workflows/ci.yml`): Go tests and web lint/test on pull requests and pushes to `main`.
+- **CI** (`.github/workflows/ci.yml`): Go tests (including worker batch/fan-out and alerter notifier tests), web lint/test, and a Docker Compose **e2e smoke** job on pull requests.
 - **Release** (`.github/workflows/release.yml`): [release-please](https://github.com/googleapis/release-please) creates version tags from Conventional Commits on `main`.
 
 ## Roadmap
 
-- [ ] File-tail agent binary (`services/agent`)
+- [x] File-tail agent binary (`services/agent`)
 - [ ] Rule management UI with validation and dry-run
 - [ ] OpenTelemetry export from ingest
 - [ ] Multi-tenant API keys and retention policies
