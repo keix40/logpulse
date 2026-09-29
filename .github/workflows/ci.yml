@@ -126,6 +126,7 @@ jobs:
           INGEST_API_KEY: test-ingest-key
           READ_API_KEY: test-read-key
           WORKER_CORS_ORIGINS: http://localhost:3000
+          ALERT_RULES_PATH: deploy/alerts.yaml
         run: |
           go build -o /tmp/logpulse-all ./services/all
           /tmp/logpulse-all &

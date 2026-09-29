@@ -151,7 +151,7 @@ func loadConfig() config {
 		IngestAPIKey:      os.Getenv("INGEST_API_KEY"),
 		ReadAPIKey:        os.Getenv("READ_API_KEY"),
 		CORSOrigins:       strings.Split(origins, ","),
-		RulesPath:         envOr("ALERT_RULES_PATH", "/etc/logpulse/alerts.yaml"),
+		RulesPath:         envOr("ALERT_RULES_PATH", rulesPathDefault()),
 		MaxNotifyAttempts: parseIntEnv("ALERTER_MAX_NOTIFY_ATTEMPTS", 5),
 		Notify: notify.Config{
 			SlackWebhookURL:   os.Getenv("SLACK_WEBHOOK_URL"),
@@ -198,4 +198,11 @@ func parseInt64Env(key string, def int64) int64 {
 		return def
 	}
 	return n
+}
+
+func rulesPathDefault() string {
+	if _, err := os.Stat("/etc/logpulse/alerts.yaml"); err == nil {
+		return "/etc/logpulse/alerts.yaml"
+	}
+	return "deploy/alerts.yaml"
 }
