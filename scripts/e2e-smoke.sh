@@ -42,7 +42,7 @@ curl -sf -X POST "${INGEST_URL}/v1/logs" \
   -d "{\"logs\":[{\"timestamp\":\"${ts}\",\"level\":\"info\",\"service\":\"e2e-http\",\"message\":\"${HTTP_MARKER}\"}]}"
 
 printf '<134>1 %s host e2e-syslog - - - %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")" "$SYSLOG_MARKER" \
-  | nc -w 3 "$SYSLOG_ADDR" 5514 || true
+  | nc -w 3 "$SYSLOG_HOST" "$SYSLOG_PORT"
 
 curl -sf -X POST "${INGEST_URL}/v1/logs" \
   -H "Content-Type: application/json" \
