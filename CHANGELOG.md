@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/keix40/logpulse/compare/v1.0.0...v1.0.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* **worker:** ack stream messages only after ClickHouse insert ([#3](https://github.com/keix40/logpulse/issues/3)) ([45750e5](https://github.com/keix40/logpulse/commit/45750e5ea7e54e6865e14c0b8788f452b3c4420c))
+
 ## 1.0.0 (2026-09-29)
 
 
