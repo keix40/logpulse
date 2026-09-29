@@ -1,6 +1,7 @@
 package alertengine
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -43,6 +44,45 @@ func TestCooldownDedup(t *testing.T) {
 	inc2 := e.Process(entry, now.Add(time.Second))
 	if len(inc2) != 0 {
 		t.Fatal("expected cooldown to suppress duplicate")
+	}
+}
+
+func TestThresholdCooldownGroupsByServiceNotMessage(t *testing.T) {
+	rules := []Rule{{
+		ID: "err-burst", Name: "Errors", Enabled: true, Level: "error",
+		Window: time.Minute, Threshold: 3, Cooldown: 10 * time.Minute,
+		GroupKey: "service",
+	}}
+	e := NewEngine(rules)
+	now := time.Now()
+	for i := 0; i < 3; i++ {
+		e.Process(logevent.Entry{
+			Level: "error", Service: "api", Message: "fail-" + string(rune('a'+i)),
+		}, now.Add(time.Duration(i)*time.Second))
+	}
+	inc := e.Process(logevent.Entry{Level: "error", Service: "api", Message: "fail-d"}, now.Add(3*time.Second))
+	if len(inc) != 0 {
+		t.Fatal("expected cooldown to suppress alerts for same service group")
+	}
+}
+
+func TestIncidentCountReflectsWindowSize(t *testing.T) {
+	rules := []Rule{{
+		ID: "w", Name: "W", Enabled: true, Level: "error",
+		Window: time.Minute, Threshold: 3, Cooldown: time.Minute,
+	}}
+	e := NewEngine(rules)
+	now := time.Now()
+	entry := logevent.Entry{Level: "error", Service: "s", Message: "x"}
+	for i := 0; i < 2; i++ {
+		e.Process(entry, now.Add(time.Duration(i)*time.Second))
+	}
+	inc := e.Process(entry, now.Add(2*time.Second))
+	if len(inc) != 1 {
+		t.Fatalf("expected incident, got %d", len(inc))
+	}
+	if inc[0].Count != 3 {
+		t.Fatalf("count = %d want 3", inc[0].Count)
 	}
 }
 
