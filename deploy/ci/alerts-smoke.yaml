@@ -1,0 +1,10 @@
+rules:
+  - id: e2e-smoke
+    name: E2E smoke alert
+    description: Fires when CI smoke test emits the marker string
+    enabled: true
+    pattern: "E2E_SMOKE_ALERT"
+    window: 1m
+    cooldown: 1m
+    channels:
+      - slack

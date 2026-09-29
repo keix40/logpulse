@@ -6,6 +6,7 @@ use (
 	./pkg/alertengine
 	./pkg/logevent
 	./pkg/redisx
+	./services/agent
 	./services/alerter
 	./services/ingest
 	./services/worker

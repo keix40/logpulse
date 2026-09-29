@@ -20,16 +20,19 @@ type Notifier struct {
 }
 
 func NewNotifier(cfg config, logger *slog.Logger) *Notifier {
+	return NewNotifierWithClient(cfg, logger, &http.Client{Timeout: 10 * time.Second})
+}
+
+func NewNotifierWithClient(cfg config, logger *slog.Logger, client *http.Client) *Notifier {
 	return &Notifier{
 		cfg:    cfg,
-		client: &http.Client{Timeout: 10 * time.Second},
+		client: client,
 		logger: logger,
 	}
 }
 
 func (n *Notifier) Notify(ctx context.Context, inc alertengine.Incident) error {
-	text := fmt.Sprintf("[LogPulse] %s — %s (count=%d)\n%s",
-		inc.RuleName, inc.RuleID, inc.Count, inc.Sample)
+	text := formatIncidentMessage(inc)
 	var errs []string
 	for _, ch := range inc.Channels {
 		switch strings.ToLower(ch) {
